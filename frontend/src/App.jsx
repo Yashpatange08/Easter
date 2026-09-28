@@ -24,14 +24,19 @@ function App() {
               {/* Public Routes */}
               <Route path="/" element={<Home />} />
               <Route path="/about" element={<About />} />
+              <Route path="/About" element={<About />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 
               {/* Protected Routes */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/exams" element={<Exams />} />
+                <Route path="/Exams" element={<Exams />} />
+                <Route path="/pyqs" element={<PYQs />} />
                 <Route path="/PYQs" element={<PYQs />} />
+                <Route path="/notes" element={<Notes />} />
                 <Route path="/Notes" element={<Notes />} />
+                <Route path="/helper" element={<Helper />} />
                 <Route path="/Helper" element={<Helper />} />
               </Route>
             </Routes>
@@ -43,4 +48,3 @@ function App() {
 }
 
 export default App;
-

@@ -1,7 +1,9 @@
 import axios from "axios";
 
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 const api = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -26,14 +28,14 @@ api.interceptors.response.use(
       error.response &&
       error.response.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url.includes("/api/login/") &&
-      !originalRequest.url.includes("/api/token/refresh/")
+      !originalRequest.url?.includes("/api/login/") &&
+      !originalRequest.url?.includes("/api/token/refresh/")
     ) {
       originalRequest._retry = true;
       const refreshToken = localStorage.getItem("refresh_token");
       if (refreshToken) {
         try {
-          const res = await axios.post("http://localhost:8000/api/token/refresh/", {
+          const res = await axios.post(`${API_BASE_URL}/api/token/refresh/`, {
             refresh: refreshToken,
           });
           if (res.data.access) {
@@ -41,11 +43,10 @@ api.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${res.data.access}`;
             return api(originalRequest);
           }
-        } catch (refreshErr) {
+        } catch {
           localStorage.removeItem("access_token");
           localStorage.removeItem("refresh_token");
           localStorage.removeItem("user");
-          window.location.href = "/login";
         }
       } else {
         localStorage.removeItem("access_token");

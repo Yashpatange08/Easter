@@ -22,15 +22,16 @@ import Chip from "@mui/material/Chip";
 import React from "react";
 import IconButton from "@mui/material/IconButton";
 import MenuIcon from "@mui/icons-material/Menu";
+import Tooltip from "@mui/material/Tooltip";
 import { useAuth } from "../context/AuthContext";
 
 export default function Navbar(props) {
   const { drawerWidth, content } = props;
-  
+
   const location = useLocation();
   const navigate = useNavigate();
-  const path = location.pathname;
-  const { user, logout } = useAuth();
+  const currentPath = location.pathname.toLowerCase();
+  const { user, logout, backendOnline } = useAuth();
 
   const [open, setOpen] = React.useState(false);
   const changeOpenState = () => {
@@ -41,15 +42,25 @@ export default function Navbar(props) {
     logout();
     navigate("/login");
   };
+
+  const handleNavClick = () => {
+    if (open) setOpen(false);
+  };
+
   const myDrawer = (
     <div>
       <Toolbar />
       <Box sx={{ overflow: "auto" }}>
         <List>
           <ListItem disablePadding>
-            <ListItemButton component={Link} to="/" selected={"/" === path}>
+            <ListItemButton
+              component={Link}
+              to="/"
+              selected={"/" === currentPath}
+              onClick={handleNavClick}
+            >
               <ListItemIcon>
-                <HomeIcon />
+                <HomeIcon color={"/" === currentPath ? "primary" : "inherit"} />
               </ListItemIcon>
               <ListItemText primary={"Home"} />
             </ListItemButton>
@@ -58,50 +69,29 @@ export default function Navbar(props) {
           <ListItem disablePadding>
             <ListItemButton
               component={Link}
-              to="/Exams"
-              selected={"/Exams" === path}
+              to="/pyqs"
+              selected={currentPath.startsWith("/pyq")}
+              onClick={handleNavClick}
             >
               <ListItemIcon>
-                <BookIcon />
+                <DescriptionIcon color={currentPath.startsWith("/pyq") ? "primary" : "inherit"} />
               </ListItemIcon>
-              <ListItemText primary={"Exams"} />
+              <ListItemText
+                primary={"PYQs (Question Papers)"}
+                primaryTypographyProps={{ fontWeight: currentPath.startsWith("/pyq") ? 700 : 500 }}
+              />
             </ListItemButton>
           </ListItem>
 
           <ListItem disablePadding>
             <ListItemButton
               component={Link}
-              to="/About"
-              selected={"/About" === path}
+              to="/notes"
+              selected={currentPath.startsWith("/note")}
+              onClick={handleNavClick}
             >
               <ListItemIcon>
-                <InfoIcon />
-              </ListItemIcon>
-              <ListItemText primary={"About"} />
-            </ListItemButton>
-          </ListItem>
-
-          <ListItem disablePadding>
-            <ListItemButton
-              component={Link}
-              to="/PYQs"
-              selected={"/PYQs" === path}
-            >
-              <ListItemIcon>
-                <DescriptionIcon />
-              </ListItemIcon>
-              <ListItemText primary={"PYQs"} />
-            </ListItemButton>
-          </ListItem>
-
-          <ListItem disablePadding>
-            <ListItemButton
-              component={Link}
-              to="/Notes"
-              selected={"/Notes" === path}
-            >
-              <ListItemIcon>
-                <LibraryBooksIcon />
+                <LibraryBooksIcon color={currentPath.startsWith("/note") ? "primary" : "inherit"} />
               </ListItemIcon>
               <ListItemText primary={"Notes"} />
             </ListItemButton>
@@ -110,31 +100,62 @@ export default function Navbar(props) {
           <ListItem disablePadding>
             <ListItemButton
               component={Link}
-              to="/Helper"
-              selected={"/Helper" === path}
+              to="/exams"
+              selected={currentPath.startsWith("/exam")}
+              onClick={handleNavClick}
             >
               <ListItemIcon>
-                <ChatIcon />
+                <BookIcon color={currentPath.startsWith("/exam") ? "primary" : "inherit"} />
               </ListItemIcon>
-              <ListItemText primary={"Helper"} />
+              <ListItemText primary={"Exams"} />
+            </ListItemButton>
+          </ListItem>
+
+          <ListItem disablePadding>
+            <ListItemButton
+              component={Link}
+              to="/helper"
+              selected={currentPath.startsWith("/helper")}
+              onClick={handleNavClick}
+            >
+              <ListItemIcon>
+                <ChatIcon color={currentPath.startsWith("/helper") ? "primary" : "inherit"} />
+              </ListItemIcon>
+              <ListItemText primary={"Study Helper"} />
+            </ListItemButton>
+          </ListItem>
+
+          <ListItem disablePadding>
+            <ListItemButton
+              component={Link}
+              to="/about"
+              selected={currentPath.startsWith("/about")}
+              onClick={handleNavClick}
+            >
+              <ListItemIcon>
+                <InfoIcon color={currentPath.startsWith("/about") ? "primary" : "inherit"} />
+              </ListItemIcon>
+              <ListItemText primary={"About"} />
             </ListItemButton>
           </ListItem>
         </List>
         <Divider />
       </Box>
     </div>
-    
   );
-  
+
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
       <AppBar
         position="fixed"
-        sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        sx={{
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+          background: "linear-gradient(90deg, #1565c0 0%, #1e88e5 100%)",
+        }}
       >
         <Toolbar>
-          <IconButton 
+          <IconButton
             color="inherit"
             onClick={changeOpenState}
             sx={{ mr: 2, display: { sm: "none" } }}
@@ -149,12 +170,29 @@ export default function Navbar(props) {
             sx={{
               color: "inherit",
               textDecoration: "none",
-              fontWeight: 700,
+              fontWeight: 800,
+              letterSpacing: 0.5,
               flexGrow: 1,
             }}
           >
             Easter
           </Typography>
+
+          {/* Backend Health Badge */}
+          <Tooltip title={backendOnline ? "Django REST API is connected" : "Connecting to Django backend..."}>
+            <Chip
+              size="small"
+              label={backendOnline ? "API Online" : "Checking API..."}
+              sx={{
+                mr: 2,
+                bgcolor: backendOnline ? "rgba(46, 125, 50, 0.9)" : "rgba(237, 108, 2, 0.9)",
+                color: "white",
+                fontWeight: 600,
+                fontSize: "0.75rem",
+                display: { xs: "none", md: "inline-flex" },
+              }}
+            />
+          </Tooltip>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             {user ? (
@@ -209,7 +247,7 @@ export default function Navbar(props) {
       <Drawer
         variant="permanent"
         sx={{
-          display:{xs:"none",sm:"block"},
+          display: { xs: "none", sm: "block" },
           width: drawerWidth,
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
@@ -223,10 +261,10 @@ export default function Navbar(props) {
 
       <Drawer
         variant="temporary"
-        open = {open}
+        open={open}
         onClose={changeOpenState}
         sx={{
-          display:{xs:"block",sm:"none"},
+          display: { xs: "block", sm: "none" },
           width: drawerWidth,
           flexShrink: 0,
           [`& .MuiDrawer-paper`]: {
@@ -238,7 +276,7 @@ export default function Navbar(props) {
         {myDrawer}
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
         <Toolbar />
         {content}
       </Box>
