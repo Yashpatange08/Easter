@@ -24,6 +24,7 @@ import IconButton from "@mui/material/IconButton";
 import MenuIcon from "@mui/icons-material/Menu";
 import Tooltip from "@mui/material/Tooltip";
 import { useAuth } from "../context/AuthContext";
+import EasterLogo from "./EasterLogo";
 
 export default function Navbar(props) {
   const { drawerWidth, content } = props;
@@ -162,21 +163,9 @@ export default function Navbar(props) {
           >
             <MenuIcon />
           </IconButton>
-          <Typography
-            variant="h6"
-            noWrap
-            component={Link}
-            to="/"
-            sx={{
-              color: "inherit",
-              textDecoration: "none",
-              fontWeight: 800,
-              letterSpacing: 0.5,
-              flexGrow: 1,
-            }}
-          >
-            Easter
-          </Typography>
+          <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+            <EasterLogo size="small" to="/" />
+          </Box>
 
           {/* Backend Health Badge */}
           <Tooltip title={backendOnline ? "Django REST API is connected" : "Connecting to Django backend..."}>

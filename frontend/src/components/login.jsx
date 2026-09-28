@@ -52,7 +52,7 @@ export default function Login() {
         minHeight: "70vh",
       }}
     >
-      <Card sx={{ maxWidth: 420, width: "100%", p: 2, boxShadow: 3 }}>
+      <Card sx={{ maxWidth: 420, width: "100%", p: 2, boxShadow: 3, borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h5" component="h1" gutterBottom fontWeight="bold" textAlign="center">
             Sign In

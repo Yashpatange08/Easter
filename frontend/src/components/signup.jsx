@@ -86,7 +86,7 @@ export default function Signup() {
         minHeight: "70vh",
       }}
     >
-      <Card sx={{ maxWidth: 440, width: "100%", p: 2, boxShadow: 3 }}>
+      <Card sx={{ maxWidth: 440, width: "100%", p: 2, boxShadow: 3, borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h5" component="h1" gutterBottom fontWeight="bold" textAlign="center">
             Create an Account

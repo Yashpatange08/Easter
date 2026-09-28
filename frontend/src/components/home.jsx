@@ -7,19 +7,16 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CardActions from "@mui/material/CardActions";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import DescriptionIcon from "@mui/icons-material/Description";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
 import BookIcon from "@mui/icons-material/Book";
 import ChatIcon from "@mui/icons-material/Chat";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import SyncIcon from "@mui/icons-material/Sync";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { useAuth } from "../context/AuthContext";
 
 export default function Home() {
-  const { user, backendOnline, backendHealth, checkHealth } = useAuth();
+  const { user } = useAuth();
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto", py: 2 }}>
@@ -35,8 +32,8 @@ export default function Home() {
         }}
       >
         <Stack spacing={2}>
-          <Typography variant="overline" sx={{ letterSpacing: 2, color: "#bbdefb", fontWeight: 700 }}>
-            Welcome to Easter Study Hub
+          <Typography variant="overline" sx={{ letterSpacing: 2, color: "#bbdefb", fontWeight: 700, fontSize: "0.85rem" }}>
+            ✦ WELCOME TO EASTER
           </Typography>
           <Typography variant="h3" component="h1" fontWeight="800">
             {user ? `Hello, ${user.username}!` : "Your Complete Engineering Study Platform"}
@@ -77,43 +74,6 @@ export default function Home() {
                 Create Free Account
               </Button>
             )}
-          </Stack>
-        </Stack>
-      </Card>
-
-      {/* Backend & Live System Status */}
-      <Card sx={{ mb: 4, p: 2.5, borderRadius: 2.5, bgcolor: "#f8fafd", border: "1px solid #e3f2fd" }}>
-        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={2}>
-          <Box>
-            <Typography variant="subtitle1" fontWeight="700" color="primary.main">
-              Full-Stack Connection Status
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Django REST Backend (Port 8000) ⟷ React Vite Frontend (Port 5173)
-            </Typography>
-          </Box>
-
-          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-            <Chip
-              icon={<CheckCircleIcon sx={{ "&&": { color: "white" } }} />}
-              label={backendOnline ? "Django Connected & Healthy" : "Checking Backend Connection"}
-              sx={{
-                bgcolor: backendOnline ? "#2e7d32" : "#f57c00",
-                color: "white",
-                fontWeight: 600,
-              }}
-            />
-            {backendHealth?.counts && (
-              <Chip
-                label={`${backendHealth.counts.pyqs || 610} PYQs in DB`}
-                variant="outlined"
-                color="primary"
-                size="small"
-              />
-            )}
-            <Button size="small" onClick={checkHealth} startIcon={<SyncIcon />} variant="text">
-              Refresh
-            </Button>
           </Stack>
         </Stack>
       </Card>
