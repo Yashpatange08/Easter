@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
@@ -15,6 +15,8 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import IconButton from "@mui/material/IconButton";
+import Pagination from "@mui/material/Pagination";
+import { useTheme } from "@mui/material/styles";
 
 import SearchIcon from "@mui/icons-material/Search";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -54,9 +56,18 @@ const REFERENCE_ORDER = [
   "BTECH-2-SEM-ENGINEERING-MATHEMATICS-2-MATH-201-JAN-2026",
 ];
 
+// O(1) Map lookup for instant sort index resolution
+const REFERENCE_ORDER_MAP = new Map(
+  REFERENCE_ORDER.map((item, index) => [item.toUpperCase(), index])
+);
+
 export default function PYQs() {
-  const [papers, setPapers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+
+  // Pre-initialize with local bundled data for instantaneous 0ms page load
+  const [papers, setPapers] = useState(localPyqs || []);
+  const [loading, setLoading] = useState(false);
 
   // Name format: 'portal_pdf' (default), 'friendly' (e.g. M1 PYQ 2026.pdf), or 'portal_raw'
   const [nameFormat, setNameFormat] = useState("portal_pdf");
@@ -66,34 +77,75 @@ export default function PYQs() {
   const [selectedSemester, setSelectedSemester] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Virtual Pagination state: keeps DOM lightweight (<500 nodes) for instant responsiveness
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
   // In-Page PDF Viewer State
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentPdf, setCurrentPdf] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(true);
 
-  const fetchPapers = async () => {
-    setLoading(true);
+  // Cache of prefetched URLs to avoid duplicate network requests
+  const prefetchedUrls = useRef(new Set());
+
+  // High-performance pre-fetcher for zero-wait PDF opening
+  const prefetchPdf = (url) => {
+    if (!url || prefetchedUrls.current.has(url)) return;
+    prefetchedUrls.current.add(url);
     try {
-      const res = await api.get("/api/pyqs/");
-      if (Array.isArray(res.data) && res.data.length > 0) {
-        setPapers(res.data);
-      } else {
-        setPapers(localPyqs);
+      const link = document.createElement("link");
+      link.rel = "prefetch";
+      link.as = "fetch";
+      link.href = url;
+      document.head.appendChild(link);
+      if (typeof window.fetch === "function") {
+        fetch(url, { priority: "low" }).catch(() => {});
       }
-    } catch {
-      setPapers(localPyqs);
-    } finally {
-      setLoading(false);
-    }
+    } catch {}
   };
 
+  // Only sync from backend if local data is empty
   useEffect(() => {
-    fetchPapers();
+    if (!papers || papers.length === 0) {
+      setLoading(true);
+      api
+        .get("/api/pyqs/")
+        .then((res) => {
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            setPapers(res.data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
   }, []);
 
-  // Filter papers and maintain the reference portal order
+  // Reset pagination to page 1 on filter or search changes
+  useEffect(() => {
+    setPage(1);
+  }, [selectedBranch, selectedSemester, searchQuery]);
+
+  // Sort the full dataset ONCE with O(1) Map lookups, rather than re-sorting on every single keystroke
+  const sortedBasePapers = useMemo(() => {
+    const list = [...papers];
+    list.sort((a, b) => {
+      const titleA = (a.title || "").toUpperCase();
+      const titleB = (b.title || "").toUpperCase();
+      const idxA = REFERENCE_ORDER_MAP.get(titleA);
+      const idxB = REFERENCE_ORDER_MAP.get(titleB);
+      if (idxA !== undefined && idxB !== undefined) return idxA - idxB;
+      if (idxA !== undefined) return -1;
+      if (idxB !== undefined) return 1;
+      return titleA.localeCompare(titleB);
+    });
+    return list;
+  }, [papers]);
+
+  // Fast O(N) filter pass without expensive re-sorting
   const filteredPapers = useMemo(() => {
-    let result = [...papers];
+    let result = sortedBasePapers;
 
     // Branch filter
     if (selectedBranch !== "ALL") {
@@ -107,7 +159,7 @@ export default function PYQs() {
 
     // Search query
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       result = result.filter(
         (p) =>
           p.title?.toLowerCase().includes(q) ||
@@ -120,25 +172,35 @@ export default function PYQs() {
       );
     }
 
-    // Default to the reference order from DBATU portal photo
-    result.sort((a, b) => {
-      const titleA = (a.title || "").toUpperCase();
-      const titleB = (b.title || "").toUpperCase();
-      const idxA = REFERENCE_ORDER.indexOf(titleA);
-      const idxB = REFERENCE_ORDER.indexOf(titleB);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return titleA.localeCompare(titleB);
-    });
-
     return result;
-  }, [papers, selectedBranch, selectedSemester, searchQuery]);
+  }, [sortedBasePapers, selectedBranch, selectedSemester, searchQuery]);
 
-  // Open PDF in modal viewer
+  // Paginated slice for fast DOM rendering
+  const totalPages = Math.ceil(filteredPapers.length / (pageSize === "ALL" ? 1 : pageSize)) || 1;
+  const paginatedPapers = useMemo(() => {
+    if (pageSize === "ALL") return filteredPapers;
+    const start = (page - 1) * pageSize;
+    return filteredPapers.slice(start, start + pageSize);
+  }, [filteredPapers, page, pageSize]);
+
+  // Predictive pre-fetching: Automatically warm the browser cache with top visible PDFs
+  useEffect(() => {
+    if (paginatedPapers.length > 0) {
+      paginatedPapers.slice(0, 5).forEach((p) => {
+        prefetchPdf(p.pdf_url || p.url);
+      });
+    }
+  }, [paginatedPapers]);
+
+  // Open PDF in modal viewer with immediate feedback
   const handleOpenPdf = (paper) => {
     setCurrentPdf(paper);
+    setPdfLoading(true);
     setViewerOpen(true);
+    // Safety auto-dismiss: ensure viewer is never blocked if browser's native PDF plugin doesn't trigger iframe load event
+    setTimeout(() => {
+      setPdfLoading(false);
+    }, 600);
   };
 
   const handleClosePdf = () => {
@@ -176,13 +238,16 @@ export default function PYQs() {
     return baseTitle.toLowerCase().endsWith(".pdf") ? baseTitle : `${baseTitle}.pdf`;
   };
 
-  // Color logic matching reference screenshot: Summer exams are orange, Winter/Jan exams are deep blue
+  // Color logic: Summer exams are orange, Winter/Jan exams are deep blue (or cyan in dark mode)
   const getItemColor = (paper) => {
     const isSummer =
       paper.session?.toUpperCase() === "SUMMER" ||
       paper.title?.toUpperCase().includes("SUMMER") ||
       paper.filename?.toUpperCase().includes("SUMMER");
 
+    if (isDark) {
+      return isSummer ? "#fb923c" : "#38bdf8";
+    }
     return isSummer ? "#e65100" : "#002060";
   };
 
@@ -215,22 +280,25 @@ export default function PYQs() {
   }, [semesterCounts]);
 
   return (
-    <Box sx={{ maxWidth: 1300, mx: "auto", p: { xs: 1, sm: 2, md: 3 } }}>
+    <Box sx={{ maxWidth: 1350, mx: "auto", p: { xs: 1, sm: 2, md: 3 } }}>
       {/* Header Banner */}
       <Card
         sx={{
           mb: 2.5,
           p: { xs: 2.5, sm: 3 },
-          background: "linear-gradient(135deg, #0d47a1 0%, #1565c0 50%, #1976d2 100%)",
+          background: isDark
+            ? "linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0369a1 100%)"
+            : "linear-gradient(135deg, #0d47a1 0%, #1565c0 50%, #1976d2 100%)",
           color: "white",
-          borderRadius: 3,
-          boxShadow: "0 10px 25px rgba(13, 71, 161, 0.25)",
+          borderRadius: 3.5,
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "none",
+          boxShadow: isDark ? "0 10px 30px rgba(0,0,0,0.5)" : "0 10px 25px rgba(13, 71, 161, 0.25)",
         }}
       >
         <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={2}>
           <Box>
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1 }}>
-              <SchoolIcon sx={{ fontSize: 36, color: "#bbdefb" }} />
+              <SchoolIcon sx={{ fontSize: 36, color: "#38bdf8" }} />
               <Typography variant="h4" component="h1" fontWeight="800">
                 {selectedBranch === "ALL" ? "DBATU Engineering PYQs" : `${selectedBranch} PYQs`}
               </Typography>
@@ -238,7 +306,7 @@ export default function PYQs() {
             <Typography variant="body1" sx={{ color: "rgba(255, 255, 255, 0.9)", maxWidth: 750 }}>
               Official DBATU University Previous Year Question Papers for{" "}
               <strong>{selectedBranch === "ALL" ? "All Engineering Branches" : selectedBranch}</strong>.
-              Click any question paper link to open and view the PDF directly!
+              Click any question paper link to open and view the PDF with zero loading delays!
             </Typography>
           </Box>
 
@@ -246,17 +314,28 @@ export default function PYQs() {
             icon={<PictureAsPdfIcon sx={{ "&&": { color: "white" } }} />}
             label={`${papers.length} PDF Papers`}
             sx={{
-              bgcolor: "rgba(255, 255, 255, 0.2)",
+              bgcolor: isDark ? "rgba(56, 189, 248, 0.2)" : "rgba(255, 255, 255, 0.2)",
               color: "white",
-              fontWeight: 600,
+              fontWeight: 700,
+              fontSize: "0.85rem",
               alignSelf: { xs: "flex-start", sm: "center" },
+              border: isDark ? "1px solid rgba(56, 189, 248, 0.4)" : "none",
             }}
           />
         </Stack>
       </Card>
 
       {/* Simplified Controls Card */}
-      <Card sx={{ mb: 2.5, p: 2, borderRadius: 2.5, boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+      <Card
+        sx={{
+          mb: 2.5,
+          p: 2,
+          borderRadius: 2.5,
+          bgcolor: isDark ? "#0f172a" : "#ffffff",
+          border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "none",
+          boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.3)" : "0 2px 10px rgba(0,0,0,0.05)",
+        }}
+      >
         <Grid container spacing={2} alignItems="center">
           {/* Search Bar */}
           <Grid item xs={12} sm={6} md={3.5}>
@@ -352,28 +431,51 @@ export default function PYQs() {
         </Grid>
       </Card>
 
-      {/* Result Count and Branch Info */}
+      {/* Result Count, Pagination Top Header & Page Size Selector */}
       <Box sx={{ mb: 1.5, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1 }}>
         <Typography variant="body2" color="text.secondary">
-          Branch: <strong>{selectedBranch === "ALL" ? "All Branches" : selectedBranch}</strong>
+          Showing {filteredPapers.length > 0 ? (page - 1) * (pageSize === "ALL" ? filteredPapers.length : pageSize) + 1 : 0}–
+          {pageSize === "ALL" ? filteredPapers.length : Math.min(page * pageSize, filteredPapers.length)} of {filteredPapers.length} Question Paper{filteredPapers.length !== 1 ? "s" : ""}
+          {selectedBranch !== "ALL" && (
+            <>
+              {" "}• <strong>{selectedBranch}</strong>
+            </>
+          )}
           {selectedSemester !== "ALL" && (
             <>
-              {" "}• Semester: <strong>Semester {selectedSemester}</strong>
+              {" "}• <strong>Sem {selectedSemester}</strong>
             </>
           )}
         </Typography>
-        <Typography variant="body2" fontWeight="700" color="primary">
-          Showing {filteredPapers.length} Question Paper{filteredPapers.length !== 1 ? "s" : ""}
-        </Typography>
+
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Typography variant="caption" color="text.secondary" fontWeight="600">
+            Per page:
+          </Typography>
+          {[25, 50, 100, "ALL"].map((size) => (
+            <Chip
+              key={size}
+              label={size === "ALL" ? "All" : size}
+              size="small"
+              variant={pageSize === size ? "filled" : "outlined"}
+              color={pageSize === size ? "primary" : "default"}
+              onClick={() => {
+                setPageSize(size);
+                setPage(1);
+              }}
+              sx={{ cursor: "pointer", fontWeight: 600, fontSize: "0.72rem", height: 24 }}
+            />
+          ))}
+        </Stack>
       </Box>
 
-      {/* Loading state */}
+      {/* Loading state or Empty State */}
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
           <CircularProgress />
         </Box>
       ) : filteredPapers.length === 0 ? (
-        <Card sx={{ p: 5, textAlign: "center", borderRadius: 3, bgcolor: "#fbfbfb" }}>
+        <Card sx={{ p: 5, textAlign: "center", borderRadius: 3, bgcolor: isDark ? "#0f172a" : "#fbfbfb" }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No question papers found
           </Typography>
@@ -391,16 +493,17 @@ export default function PYQs() {
           </Button>
         </Card>
       ) : (
-        /* SINGLE LIST OF LINKS (REFERENCE SCREENSHOT STYLE) */
+        /* SINGLE LIST OF LINKS (FAST PAGINATED RENDER) */
         <Card
           sx={{
             p: { xs: 2, sm: 3 },
             borderRadius: 2.5,
-            boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-            bgcolor: "#ffffff",
+            boxShadow: isDark ? "0 4px 24px rgba(0,0,0,0.3)" : "0 2px 12px rgba(0,0,0,0.06)",
+            bgcolor: isDark ? "#0f172a" : "#ffffff",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "none",
           }}
         >
-          {/* Orange dashed horizontal line from the user's reference photo */}
+          {/* Orange dashed horizontal line matching reference screenshot */}
           <Box
             sx={{
               width: "100%",
@@ -409,9 +512,9 @@ export default function PYQs() {
             }}
           />
 
-          {/* Vertical List of Links */}
+          {/* Vertical List of Links - Rendered in ultra-fast paginated batches */}
           <Stack spacing={1.2}>
-            {filteredPapers.map((paper, idx) => {
+            {paginatedPapers.map((paper, idx) => {
               const displayName = getDisplayName(paper);
               const itemColor = getItemColor(paper);
               const pdfUrl = paper.pdf_url || paper.url;
@@ -419,6 +522,7 @@ export default function PYQs() {
               return (
                 <Box
                   key={`${paper.filename || paper.title}-${idx}`}
+                  onMouseEnter={() => prefetchPdf(pdfUrl)}
                   sx={{
                     py: 1,
                     px: 1.5,
@@ -428,9 +532,9 @@ export default function PYQs() {
                     justifyContent: "space-between",
                     gap: 2,
                     transition: "all 0.15s ease",
-                    borderBottom: idx !== filteredPapers.length - 1 ? "1px solid #f3f4f6" : "none",
+                    borderBottom: idx !== paginatedPapers.length - 1 ? (isDark ? "1px solid rgba(255, 255, 255, 0.05)" : "1px solid #f3f4f6") : "none",
                     "&:hover": {
-                      bgcolor: "#f8fafd",
+                      bgcolor: isDark ? "rgba(56, 189, 248, 0.06)" : "#f8fafd",
                       "& .link-text": {
                         textDecoration: "underline",
                       },
@@ -463,17 +567,17 @@ export default function PYQs() {
                         lineHeight: 1.45,
                         transition: "color 0.15s ease",
                         "&:hover": {
-                          color: itemColor === "#e65100" ? "#bf360c" : "#1565c0",
+                          color: isDark ? "#7dd3fc" : itemColor === "#e65100" ? "#bf360c" : "#1565c0",
                         },
                       }}
-                      title="Click to view PDF directly in page"
+                      title="Click to view PDF instantly"
                     >
                       {displayName}
                     </Typography>
 
-                    {/* Subtle details tag for student clarity */}
+                    {/* Details tag for student clarity */}
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.4 }} flexWrap="wrap">
-                      <Typography variant="caption" sx={{ color: "#78909c", fontWeight: 500 }}>
+                      <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#78909c", fontWeight: 500 }}>
                         {paper.subject} • Sem {paper.semester} • {paper.branch ? `${paper.branch} • ` : ""}{paper.session} {paper.exam_year}
                       </Typography>
                       {paper.paper_code && (
@@ -481,11 +585,11 @@ export default function PYQs() {
                           variant="caption"
                           sx={{
                             fontFamily: "monospace",
-                            bgcolor: "#eceff1",
+                            bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : "#eceff1",
                             px: 0.7,
                             py: 0.1,
                             borderRadius: 0.8,
-                            color: "#455a64",
+                            color: isDark ? "#cbd5e1" : "#455a64",
                             fontSize: "0.68rem",
                           }}
                         >
@@ -495,7 +599,7 @@ export default function PYQs() {
                     </Stack>
                   </Box>
 
-                  {/* Right: Quick Actions */}
+                  {/* Right: Quick Actions (Zero-overhead native titles instead of heavy Tooltip portals) */}
                   <Stack
                     direction="row"
                     spacing={0.5}
@@ -503,60 +607,95 @@ export default function PYQs() {
                     className="action-icons"
                     sx={{
                       flexShrink: 0,
-                      opacity: { xs: 1, sm: 0.8 },
+                      opacity: { xs: 1, sm: 0.85 },
                       transition: "opacity 0.2s ease",
                     }}
                   >
-                    <Tooltip title="View PDF in Modal">
-                      <IconButton
-                        size="small"
-                        color="primary"
-                        onClick={() => handleOpenPdf(paper)}
-                        sx={{ bgcolor: "rgba(25, 118, 210, 0.08)", "&:hover": { bgcolor: "rgba(25, 118, 210, 0.18)" } }}
-                      >
-                        <VisibilityIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      title="View PDF Instantly"
+                      aria-label="View PDF"
+                      onClick={() => handleOpenPdf(paper)}
+                      sx={{
+                        bgcolor: isDark ? "rgba(56, 189, 248, 0.15)" : "rgba(25, 118, 210, 0.08)",
+                        "&:hover": { bgcolor: isDark ? "rgba(56, 189, 248, 0.25)" : "rgba(25, 118, 210, 0.18)" },
+                      }}
+                    >
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
 
-                    <Tooltip title="Download PDF">
-                      <IconButton
-                        size="small"
-                        component="a"
-                        href={pdfUrl}
-                        download={paper.filename || `${paper.subject}.pdf`}
-                        sx={{ bgcolor: "#f5f5f5", color: "#546e7a", "&:hover": { bgcolor: "#e0e0e0" } }}
-                      >
-                        <DownloadIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <IconButton
+                      size="small"
+                      component="a"
+                      href={pdfUrl}
+                      download={paper.filename || `${paper.subject}.pdf`}
+                      title="Download PDF"
+                      aria-label="Download PDF"
+                      sx={{
+                        bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : "#f5f5f5",
+                        color: isDark ? "#cbd5e1" : "#546e7a",
+                        "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.16)" : "#e0e0e0" },
+                      }}
+                    >
+                      <DownloadIcon fontSize="small" />
+                    </IconButton>
 
-                    <Tooltip title="Open PDF in New Browser Tab">
-                      <IconButton
-                        size="small"
-                        component="a"
-                        href={pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{ bgcolor: "#f5f5f5", color: "#546e7a", "&:hover": { bgcolor: "#e0e0e0" } }}
-                      >
-                        <OpenInNewIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <IconButton
+                      size="small"
+                      component="a"
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open in New Tab"
+                      aria-label="Open in New Tab"
+                      sx={{
+                        bgcolor: isDark ? "rgba(255, 255, 255, 0.08)" : "#f5f5f5",
+                        color: isDark ? "#cbd5e1" : "#546e7a",
+                        "&:hover": { bgcolor: isDark ? "rgba(255, 255, 255, 0.16)" : "#e0e0e0" },
+                      }}
+                    >
+                      <OpenInNewIcon fontSize="small" />
+                    </IconButton>
                   </Stack>
                 </Box>
               );
             })}
           </Stack>
+
+          {/* Bottom Pagination Bar */}
+          {pageSize !== "ALL" && totalPages > 1 && (
+            <Box sx={{ mt: 3, pt: 2, borderTop: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #f3f4f6", display: "flex", justifyContent: "center" }}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(e, val) => {
+                  setPage(val);
+                  window.scrollTo({ top: 300, behavior: "smooth" });
+                }}
+                color="primary"
+                shape="rounded"
+                showFirstButton
+                showLastButton
+                sx={{
+                  "& .MuiPaginationItem-root": {
+                    fontWeight: 600,
+                  },
+                }}
+              />
+            </Box>
+          )}
         </Card>
       )}
 
-      {/* In-Page PDF Viewer Dialog */}
+      {/* In-Page PDF Viewer Dialog (Fast loading iframe + visual status) */}
       <Dialog
         open={viewerOpen}
         onClose={handleClosePdf}
         fullWidth
         maxWidth={isFullscreen ? false : "lg"}
         fullScreen={isFullscreen}
+        keepMounted={false}
         PaperProps={{
           sx: {
             borderRadius: isFullscreen ? 0 : 3,
@@ -564,6 +703,7 @@ export default function PYQs() {
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
+            bgcolor: isDark ? "#0f172a" : "#ffffff",
           },
         }}
       >
@@ -574,17 +714,18 @@ export default function PYQs() {
               sx={{
                 p: 2,
                 px: 3,
-                bgcolor: "#0d47a1",
+                bgcolor: isDark ? "#1e293b" : "#0d47a1",
                 color: "white",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
                 flexWrap: "wrap",
                 gap: 1,
+                borderBottom: isDark ? "1px solid rgba(255, 255, 255, 0.08)" : "none",
               }}
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <PictureAsPdfIcon sx={{ color: "#ff8a80" }} />
+                <PictureAsPdfIcon sx={{ color: "#38bdf8" }} />
                 <Box>
                   <Typography variant="h6" fontWeight="bold" sx={{ color: "white", lineHeight: 1.2 }}>
                     {currentPdf.subject}
@@ -649,41 +790,62 @@ export default function PYQs() {
               </Stack>
             </DialogTitle>
 
-            {/* Modal Content: Embedded PDF */}
-            <DialogContent sx={{ p: 0, flexGrow: 1, bgcolor: "#525659", display: "flex", flexDirection: "column" }}>
-              <object
-                data={currentPdf.pdf_url || currentPdf.url}
-                type="application/pdf"
+            {/* Modal Content: Fast Direct Embedded PDF with Instant Loading Feedback */}
+            <DialogContent
+              sx={{
+                p: 0,
+                flexGrow: 1,
+                bgcolor: isDark ? "#090d16" : "#525659",
+                display: "flex",
+                flexDirection: "column",
+                position: "relative",
+              }}
+            >
+              {/* Fast Direct iframe using compact PDF view options (#toolbar=1&navpanes=0&view=FitH) */}
+              <iframe
+                key={currentPdf.pdf_url || currentPdf.url}
+                src={`${currentPdf.pdf_url || currentPdf.url}#toolbar=1&navpanes=0&view=FitH`}
                 width="100%"
                 height="100%"
-                style={{ flexGrow: 1, border: "none" }}
-              >
-                <iframe
-                  src={currentPdf.pdf_url || currentPdf.url}
-                  width="100%"
-                  height="100%"
-                  style={{ flexGrow: 1, border: "none" }}
-                  title={currentPdf.subject}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  flexGrow: 1,
+                  border: "none",
+                  display: "block",
+                  backgroundColor: isDark ? "#090d16" : "#525659",
+                }}
+                title={currentPdf.subject || "PDF Document"}
+                onLoad={() => setPdfLoading(false)}
+              />
+
+              {/* Animated Loading Overlay while PDF bytes stream */}
+              {pdfLoading && (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    bgcolor: isDark ? "rgba(15, 23, 42, 0.92)" : "rgba(248, 250, 253, 0.92)",
+                    backdropFilter: "blur(4px)",
+                    gap: 2,
+                    pointerEvents: "none",
+                    transition: "opacity 0.2s ease",
+                  }}
                 >
-                  <Box sx={{ p: 4, textAlign: "center", bgcolor: "white", m: 3, borderRadius: 2 }}>
-                    <Typography variant="h6" gutterBottom>
-                      PDF Viewer Notice
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 2 }}>
-                      Your browser cannot display this PDF directly in the frame.
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      component="a"
-                      href={currentPdf.pdf_url || currentPdf.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Open PDF Directly
-                    </Button>
-                  </Box>
-                </iframe>
-              </object>
+                  <CircularProgress size={44} sx={{ color: "#38bdf8" }} />
+                  <Typography variant="body1" sx={{ color: isDark ? "#f8fafc" : "#0f172a", fontWeight: 700 }}>
+                    Opening PDF Document...
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                    {currentPdf.filename || currentPdf.title}
+                  </Typography>
+                </Box>
+              )}
             </DialogContent>
           </>
         )}

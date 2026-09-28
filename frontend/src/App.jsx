@@ -1,3 +1,6 @@
+import React, { Suspense, lazy } from "react";
+import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import "./App.css";
 import { Routes, Route } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
@@ -8,11 +11,12 @@ import Home from "./components/home";
 import Exams from "./components/exams";
 import Navbar from "./components/navbar";
 import Notes from "./components/notes";
-import PYQs from "./components/pyqs";
 import Helper from "./components/helper";
 import Login from "./components/login";
 import Signup from "./components/signup";
 import ProtectedRoute from "./components/ProtectedRoute";
+
+const PYQs = lazy(() => import("./components/pyqs"));
 
 const darkTheme = createTheme({
   palette: {
@@ -72,8 +76,34 @@ function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/exams" element={<Exams />} />
                 <Route path="/Exams" element={<Exams />} />
-                <Route path="/pyqs" element={<PYQs />} />
-                <Route path="/PYQs" element={<PYQs />} />
+                <Route
+                  path="/pyqs"
+                  element={
+                    <Suspense
+                      fallback={
+                        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+                          <CircularProgress sx={{ color: "#38bdf8" }} />
+                        </Box>
+                      }
+                    >
+                      <PYQs />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/PYQs"
+                  element={
+                    <Suspense
+                      fallback={
+                        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+                          <CircularProgress sx={{ color: "#38bdf8" }} />
+                        </Box>
+                      }
+                    >
+                      <PYQs />
+                    </Suspense>
+                  }
+                />
                 <Route path="/notes" element={<Notes />} />
                 <Route path="/Notes" element={<Notes />} />
                 <Route path="/helper" element={<Helper />} />

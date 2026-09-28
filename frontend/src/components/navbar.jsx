@@ -22,7 +22,6 @@ import Chip from "@mui/material/Chip";
 import React from "react";
 import IconButton from "@mui/material/IconButton";
 import MenuIcon from "@mui/icons-material/Menu";
-import Tooltip from "@mui/material/Tooltip";
 import { useAuth } from "../context/AuthContext";
 import EasterLogo from "./EasterLogo";
 
@@ -32,7 +31,7 @@ export default function Navbar(props) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPath = location.pathname.toLowerCase();
-  const { user, logout, backendOnline } = useAuth();
+  const { user, logout } = useAuth();
 
   const [open, setOpen] = React.useState(false);
   const changeOpenState = () => {
@@ -73,6 +72,7 @@ export default function Navbar(props) {
               to="/pyqs"
               selected={currentPath.startsWith("/pyq")}
               onClick={handleNavClick}
+              onMouseEnter={() => import("./pyqs")}
             >
               <ListItemIcon>
                 <DescriptionIcon color={currentPath.startsWith("/pyq") ? "primary" : "inherit"} />
@@ -169,22 +169,6 @@ export default function Navbar(props) {
           <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
             <EasterLogo size="small" to="/" />
           </Box>
-
-          {/* Backend Health Badge */}
-          <Tooltip title={backendOnline ? "Django REST API is connected" : "Connecting to Django backend..."}>
-            <Chip
-              size="small"
-              label={backendOnline ? "API Online" : "Checking API..."}
-              sx={{
-                mr: 2,
-                bgcolor: backendOnline ? "rgba(46, 125, 50, 0.9)" : "rgba(237, 108, 2, 0.9)",
-                color: "white",
-                fontWeight: 600,
-                fontSize: "0.75rem",
-                display: { xs: "none", md: "inline-flex" },
-              }}
-            />
-          </Tooltip>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             {user ? (
