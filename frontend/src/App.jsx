@@ -1,5 +1,7 @@
 import "./App.css";
 import { Routes, Route } from "react-router-dom";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
 import { AuthProvider } from "./context/AuthContext";
 import About from "./components/about";
 import Home from "./components/home";
@@ -12,11 +14,49 @@ import Login from "./components/login";
 import Signup from "./components/signup";
 import ProtectedRoute from "./components/ProtectedRoute";
 
+const darkTheme = createTheme({
+  palette: {
+    mode: "dark",
+    background: {
+      default: "#090d16",
+      paper: "#0f172a",
+    },
+    primary: {
+      main: "#38bdf8",
+      light: "#7dd3fc",
+      dark: "#0284c7",
+      contrastText: "#090d16",
+    },
+    secondary: {
+      main: "#c084fc",
+    },
+    success: {
+      main: "#34d399",
+    },
+    warning: {
+      main: "#fbbf24",
+    },
+    text: {
+      primary: "#f8fafc",
+      secondary: "#94a3b8",
+    },
+    divider: "rgba(255, 255, 255, 0.08)",
+  },
+  typography: {
+    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  },
+  shape: {
+    borderRadius: 14,
+  },
+});
+
 function App() {
   const Mywidth = 230;
   return (
-    <AuthProvider>
-      <div className="App">
+    <ThemeProvider theme={darkTheme}>
+      <CssBaseline />
+      <AuthProvider>
+        <div className="App">
         <Navbar
           drawerWidth={Mywidth}
           content={
@@ -44,6 +84,7 @@ function App() {
         />
       </div>
     </AuthProvider>
+    </ThemeProvider>
   );
 }
 

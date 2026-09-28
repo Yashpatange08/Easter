@@ -152,7 +152,10 @@ export default function Navbar(props) {
         position="fixed"
         sx={{
           zIndex: (theme) => theme.zIndex.drawer + 1,
-          background: "linear-gradient(90deg, #1565c0 0%, #1e88e5 100%)",
+          bgcolor: "rgba(11, 15, 25, 0.85)",
+          backdropFilter: "blur(16px)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.3)",
         }}
       >
         <Toolbar>
@@ -242,6 +245,8 @@ export default function Navbar(props) {
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: "border-box",
+            bgcolor: "#0b0f19",
+            borderRight: "1px solid rgba(255, 255, 255, 0.08)",
           },
         }}
       >
@@ -259,6 +264,8 @@ export default function Navbar(props) {
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: "border-box",
+            bgcolor: "#0b0f19",
+            borderRight: "1px solid rgba(255, 255, 255, 0.08)",
           },
         }}
       >
